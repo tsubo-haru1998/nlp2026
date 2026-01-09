@@ -44,6 +44,9 @@
 \newcommand{\pkg}[1]{\textsf{#1}}
 \newcommand{\code}[1]{\texttt{#1}}
 \newcommand{\comment}[1]{\textcolor{red}{#1}}
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{here}
 %%%%%%%
 
 
@@ -79,7 +82,7 @@ ${}^{1}$東京大学
 本研究では，漫画の物語の流れをより豊かに理解し，下流タスクに応用可能な漫画理解エンコーダを提案することを目的とする．
 具体的には，動画像認識の分野で用いられる手法に着想を得て，動画像認識モデルが空間方向の情報と時間方向の情報を分けて処理するという考え方を漫画理解に応用する．
 すなわち，コマ内の構成要素の関係性とコマ同士の文脈的な関連性の学習プロセスを分離したアーキテクチャを，ComicBERT \cite{ComicBERT}の手法を拡張することで構築する．
-提案するモデルの有効性を検証するため，次パネル予測というタスクを用いた評価実験を行った．
+提案するモデルの有効性を検証するため，次パネル予測 (Next Panel Prediction, NPP) というタスクを用いた評価実験を行った．
 実験の結果，提案手法が従来手法に比べ高い正答率を示した．
 このことは，動画像認識で用いられるような空間情報と時間軸情報の分離が，漫画の文脈理解にも応用可能であることを示唆する．
 
@@ -92,7 +95,7 @@ ComicBERTでは，漫画を構成する要素としてコマ画像，キャラ�
 各コマに対してこれらの要素を検出し，各モダリティについてその特徴量を抽出したのち，線形射影によって共通の埋め込み空間に写像することで異なるモダリティを統一的に扱うことができる．
 検出や特徴量の取得には，事前学習済みモデルが用いられている．
 得られた各モダリティの埋め込みは，コマ内の構成要素を表すトークン列としてまとめられる．
-それらをコマの読順に並び替えることで，Transformer \cite{Transformer}エンコーダの入力として与えられる．
+それらをコマの読順に並び替えることで，Transformer \cite{Transformer}を基盤としたエンコーダであるComicsformerの入力として与えられる．
 この際，異なるコマを区別するため[SEP]トークンが挿入され，コマの境界が明示的に付与される．
 
 モデルの事前学習には，masked Comic Modeling (MCM) という自己教師あり学習タスクが用いられている．
@@ -132,7 +135,7 @@ ViViTのFactorized Encoderにならい，漫画のエンコーディングにお
 % アーキテクチャ図終了
 入力データは，$T$個のコマからなる漫画のシーケンスである．
 各コマの埋め込み表現は$L$個のトークンで構成される．
-アーキテクチャはSpatial EncoderとTemporal Encoderの2種類のモジュールからなり，まず各コマのトークン列を並列にSpatial Encoderに入力する．
+アーキテクチャは空間エンコーダ (Spatial Encoder) と時間エンコーダ (Temporal Encoder) の2種類のモジュールからなり，まず各コマのトークン列を並列にSpatial Encoderに入力する．
 続いて，その出力テンソルを転置することで処理の主軸をコマ内からコマ間へと切り替え，Temporal Encoderに入力し，最終的な特徴量を得る．
 
 このようにコマ内の関係性計算とコマ間の関係性計算を明示的に分割することで，計算効率を向上させながら，より豊かな複数コマ間の文脈情報をモデルが保持することができると考えられる．
@@ -155,15 +158,17 @@ ComicBERTでは，漫画の構成要素として，以下の4つをトークン�
     \item \textbf{NRT (Narration)}: ナレーションテキストの特徴．言語エンコーダにより埋め込まれる．
 \end{itemize}
 これらの特徴量は，既存のエンコーダモデルにより抽出され，線形層を通して共通の埋め込み次元$D$に射影される．
+さらに，各トークンの特徴量に対して対応するモダリティを表す埋め込みを加算し，コマの埋め込み表現としてモデルに入力する．
 
 図\ref{fig:input_sequences}上段に示すように，ComicBERTではPNLトークンを1つ，CHRトークンとSPCトークンのペアを最大3組(コマ内に3キャラクター以上存在しない場合やキャラクターにセリフがない場合は該当トークンはパディングされる)，NRTトークンを1つ並べコマの埋め込み表現としている．
 隣接するコマ同士は[SEP]トークンを挟んでトークン列を結合することにより区別している．
-一方，提案手法（Ours）では，1つのコマの埋め込み表現はComicBERTと同じであるが，隣接するコマ同士は入力データの構造によって区別する．
+一方，提案手法 (three characters) では，1つのコマの埋め込み表現はComicBERTと同じであるが，隣接するコマ同士は入力データの構造によって区別する．
 ComicBERTの入力テンソルの形状は$(L, D)$と表せるが，提案手法ではモデルのアーキテクチャに合わせて新たに軸を追加してコマの埋め込み表現を並べるため，$(T, L, D)$となる．
-また，全てのコマを通してCHRトークンとして登場するキャラクターの順番を固定し配置する方法（Character Ordered）も導入する．
+また，CHRトークン数は最大3個という制限を取り除き，全てのコマを通してCHRトークンとして登場するキャラクターの順番を固定し配置する方法（Character Ordered）も導入する．
 このとき，例えば$T$コマのシーケンス内である特定のキャラクターAは各コマのトークン列内の同じ位置に登場するため，入力データがより構造化され，モデルの理解がより促進されることが期待される．
 
 また，物体検出や埋め込み層のモジュールに依存しない別のアプローチとして，図\ref{fig:input_sequences}下段に示すパッチベース表現（Patch）も検討する．
+各コマ画像をいくつかのパッチに分割し， 線形層に通すことでコマの埋め込み表現を得る．
 これは，$T$コマの画像シーケンスを$T$フレームからなる動画とみなし，従来のVideo Transformerのように処理する手法である．
 本研究では，これらの入力表現それぞれについて学習を行い，下流タスクで評価を行い，その性能を比較検討する．
 
@@ -175,14 +180,13 @@ MCMによる学習および下流タスクの学習，評価については，�
 これによって，下流タスクのテスト時にモデルが学習済みのコマのデータが出てこないようにした．
 
 コマの構成要素の埋め込みについては，ComicBERTで用いられていたモデルと同様のものを使用した．
-具体的には，コマの全体画像の埋め込みにはEfficientNet\cite{EfficientNet}, キャラクター画像の埋め込みにはCharacter ReID model\cite{CharReID}, セリフとナレーションの埋め込みにはSentence Transformer\cite{SentenceTransformer}のDistilRoBERTa\cite{Distilbert}を使用した．
+具体的には，コマの全体画像の埋め込みにはEfficientNet\cite{EfficientNet}，キャラクター画像の埋め込みにはCharacter ReID model\cite{CharReID}，セリフとナレーションの埋め込みにはSentence Transformer\cite{SentenceTransformer}のDistilRoBERTa\cite{Distilbert}を使用した．
 
 MCMの学習時は，BERT\cite{bert}のMasked Language Modelにならい，パディングではない入力トークンのうちの20\%をマスク対象とし，マスク対象となったトークンのうちの80\%を[MASK]トークンに，10\%を別のランダムなトークンに，10\%をそのままのトークンに変えてモデルに入力した．
 損失は，マスク対象のトークンに限定した最小二乗誤差とした．
-% 詳細なハイパーパラメータは...
 
 \subsection{評価タスク}
-本実験では，モデルが漫画の物語の文脈を適切に理解できているかを確認する評価タスクとして次パネル予測を使用する．
+本実験では，モデルが漫画の物語の文脈を適切に理解できているかを確認する評価タスクとしてNPPを使用する．
 これはMangaUB\cite{MangaUB}におけるnext panel inferenceやComicBERTにおけるScene-Clozeのようなタスクであり，コマのシーケンスが与えられたときに，その次のコマが何かを選択肢の中から選ぶというものである．
 学習，推論時は各選択肢のコマについてその埋め込み表現を取得し，それまでのコマのシーケンスから得た埋め込み表現と結合させ，モデルに入力する．
 その後モデルの出力に対しMean Poolingを施し，線形層を通して各選択肢につき1つのlogitを得る．
@@ -191,45 +195,49 @@ logitが最も高い選択肢をモデルの解答とし，その正答率をモ
 easyは選択肢のうち不正解のコマを正解のコマとは異なる本の中から抽出しており，difficultは不正解のコマを正解のコマと同じ本から抽出している．
 difficultはeasyに比べ選択肢のコマの画風が似る傾向にあるため，より文脈そのものの理解が要求される．
 
-MCMタスクで学習を行なったモデルに対し，次パネル予測タスクの学習を行い，最終的にテストデータによる正答率の評価を行なった．
-学習の際，easyとdifficultの比は$2:8$とした．
+MCMタスクで学習を行なったモデルに対し，NPPタスクの学習を行い，最終的にテストデータによる正答率の評価を行なった．
+学習の際，easyとdifficultの比は$2:8$とし，損失関数としてクロスエントロピー関数を用いた．
+
+本実験の詳細な設定は，付録\ref{sec:experiment_detail}に記載する．
 
 \subsection{結果}
-ComicBERTおよび提案手法における次パネル予測の正答率を表\ref{tab:result_acc}に示す．
+ComicBERTおよび提案手法におけるNPPの正答率を表\ref{tab:result_acc}に示す．
 \begin{table}[t]
 \centering
-\caption{各手法での次パネル予測正答率 [\%]}
+\caption{各手法でのNPP正答率 [\%]}
 \label{tab:result_acc}
 \begin{tabular}{lcc}
-\hline
+\toprule
  & easy & difficult\\
-\hline
+\midrule
 ComicBERT & 72.06 & 64.88\\
 Ours & \textbf{74.22} & \textbf{66.98}\\
 Ours (character ordered) & 69.83 & 65.35\\
 Ours (patch) & 61.74 & 61.20\\
-\hline
+\bottomrule
 \end{tabular}
 \end{table}
-easy, difficultどちらの難易度においても，提案手法 (Ours) の正答率が従来手法であるComicBERTの正答率よりも高くなった．
-トークン列におけるキャラクター順を固定した手法 (character ordered) や，漫画のコマ画像の連続を動画のように扱う手法 (patch) については，どちらも提案手法 (Ours) と比較して正答率が低下した．
+easy, difficultどちらの難易度においても，提案手法 (three characters) の正答率が従来手法であるComicBERTの正答率よりも高くなった．
+トークン列におけるキャラクター順を固定した手法 (character ordered) や，漫画のコマ画像の連続を動画のように扱う手法 (patch) については，どちらも3キャラクターに限定した手法 (three characters) と比較して正答率が低下した．
 
 \subsection{考察}
-本研究で提案した階層型アーキテクチャ (Ours) の高い正答率は，モデルがコマ間の時間的・文脈的関係性をコマ内の要素間の関係性と分離することによって複数コマにわたる漫画の文脈をより適切に捉えられたことに起因すると考えられる．
-特に難易度がdifficultのタスクでも高い正答率を示したことは，画風やキャラクターの外見的な特徴だけでなく，漫画の物語そのものを理解する能力が向上したことを示している．
+本研究で提案した階層型アーキテクチャ (three characters) の高い正答率は，モデルがコマ間の時間的・文脈的関係性をコマ内の要素間の関係性と分離することによって複数コマにわたる漫画の文脈をより適切に捉えられたことに起因すると考えられる．
+特にdifficultタスクでも高い正答率を示したことは，画風やキャラクターの外見的な特徴だけでなく，漫画の物語そのものを理解する能力が向上したことを示している．
 このように，提案した漫画エンコーダのアーキテクチャは，その構造的利点により，計算量の削減，文脈理解精度の向上の両方を達成したといえる．
 
 一方で，トークン列内のキャラクター順を固定した手法 (character ordered) では，順序を固定しない手法よりも正答率が低下する結果となった．
 これは，入力トークン列の冗長化が主な要因であると考えられる．
-Character Orderedでは，各コマでキャラクターの登場したかに関わらず，シーケンス内の全登場キャラクター分のトークンスロットを確保して配置を行うため，登場人物の少ないコマであってもトークン列が長大化し，結果として入力情報が疎になる傾向がある．
-本実験の結果は，順序を固定することによる入力テンソルの構造化という利点よりも，系列長の増大に伴う学習の非効率性や情報の希薄化といった欠点の影響が大きいことを示唆している．
+Character Orderedでは，各コマでキャラクターの登場したかに関わらず，シーケンス内の全登場キャラクター分のトークンスロットを確保して配置を行うため，登場人物の少ないコマにおいてもトークン列が過度に長くなる傾向がある．
+その結果，入力情報が疎になり，学習の非効率化を招いている可能性が高い．
+本実験の結果は，順序を固定することによる入力テンソルの構造化という利点よりも，系列長の増大に伴う学習の非効率性や情報の希薄化といった欠点の影響が支配的であることを示唆している．
+これに対し，CHRトークン数を制限する手法は，系列長を抑制し，冗長なトークンを削減できるという点で有効であり，より効率的な文脈学習に寄与していると考えられる．
 
 また，漫画のコマ画像をパッチ分割して入力する手法 (patch) での正答率も低くなった．
 パッチベースの手法では，画像のみの情報からキャラクターやテキストなどの漫画特有のモダリティの意味や関係性を学習する必要があるが，本実験で用いたモデルの規模ではそれらが十分に学習されなかったと推察される．
 
 \section{おわりに}
-本研究では，コマ内の関係性とコマ間の関係性を分離して処理する漫画エンコーダのアーキテクチャを提案し，次パネル予測タスクにおいてその構造的な利点を示した．
-今後の課題として，複数の下流タスクにおいてその性能を検証し，モデルの汎用性を検証することや，漫画特有のオノマトペなどのモダリティも統合的に処理可能にすることなどが挙げられる．
+本研究では，コマ内の関係性とコマ間の関係性を分離して処理する漫画エンコーダのアーキテクチャを提案し，NPPタスクにおいてその構造的な利点を示した．
+今後の課題として，複数の下流タスクにおける性能評価を通じたモデルの汎用性の検証や，1コマあたりのCHRトークン数の上限の最適化，オノマトペなどの新たな漫画特有のモダリティの統合が挙げられる．
 
 
 
@@ -246,5 +254,86 @@ Character Orderedでは，各コマでキャラクターの登場したかに関
 % 付録(Appendix)
 % 付録を付けない場合は，以下\end{document}以外を全てをコメントアウトする．
 % 本文，参考文献に続けて作成する場合は，必ず \clearpage して新たなページとする
+\clearpage
+\appendix
+
+\section{実験設定の詳細}
+\label{sec:experiment_detail}
+
+\subsection{データセットの詳細}
+Manga109は，日本の商業漫画全109作品からなるデータセットであり，総コマ数は103,900である．
+各ページに対してコマ，キャラクターの顔および身体領域，テキスト領域のバウンディングボックスの座標がアノテーションとして付与されている．
+また，キャラクターの場合はキャラクターID，テキストの場合はその内容が付与されている．
+さらに，テキストとキャラクターを対応づけるアノテーションも提供されており，本研究ではこれらの情報を用いてモデルの入力となるトークン列を生成した．
+
+\subsection{前処理設定}
+入力として用いる各モダリティの特徴量について，線形層によって共通の次元に射影する前の次元を表\ref{tab:modality_dim}に示す．
+なお，Characterの特徴量については，Character ReID modelのbackbone埋め込み (2048次元) とそれをidentity headに通した埋め込み (256次元)を結合している．
+
+\begin{table}[H]
+\centering
+\caption{各モダリティの射影前の特徴量次元}
+\label{tab:modality_dim}
+\begin{tabular}{lc}
+\toprule
+\textbf{Modality} & \textbf{Feature Dimension}\\
+\midrule
+Panel (PNL) & 1280\\
+Character (CHR) & 2304 (2048 backbone + 256 identity)\\
+Speech (SPC) & 768\\
+Narrative (NRT) & 768\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{モデルのハイパーパラメータ}
+実験の際使用した，従来手法におけるComicsformerと提案手法におけるSpatial Encoder，Temporal Encoderのハイパーパラメータを表\ref{tab:model_hyperparams}に示す．
+なお，patch sizeは提案手法 (patch) でのみ使用される．
+
+\newpage % レイアウトの都合上挿入
+
+\begin{table}[H]
+\centering
+\small
+\caption{モデルのハイパーパラメータ}
+\label{tab:model_hyperparams}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Parameter} & \textbf{Comicsformer} & \textbf{Proposed Encoder} \\
+\midrule
+Embedding dimension & \multicolumn{2}{c}{1024} \\
+Number of heads & \multicolumn{2}{c}{16}\\
+FFN hidden size & \multicolumn{2}{c}{4096} \\
+Activation function & \multicolumn{2}{c}{GELU} \\
+Dropout rate & \multicolumn{2}{c}{0.0} \\
+Normalization & \multicolumn{2}{c}{Pre-LN} \\
+\multirow{2}{*}{Number of layers} & \multirow{2}{*}{28} & 14 (Spatial) \\
+                                  &                     & 14 (Temporal) \\
+Patch size & -- & $18 \times 18$ \\
+Encoder structure & Single encoder & Spatial + Temporal \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{実験の詳細}
+MCM, NPPの学習時に使用したハイパーパラメータを表\ref{tab:experiment_hyperparams}に示す．
+\begin{table}[H]
+\centering
+\caption{MCMおよびNPPタスク学習時のハイパーパラメータ}
+\label{tab:experiment_hyperparams}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Parameter} & \textbf{MCM} & \textbf{NPP} \\
+\midrule
+Optimizer & \multicolumn{2}{c}{AdamW} \\
+Learning rate & $1 \times 10^{-4}$ & $1 \times 10^{-5}$ \\
+LR Scheduler & \multicolumn{2}{c}{Cosine Annealing} \\
+Warmup ratio & \multicolumn{2}{c}{0.1} \\
+Weight decay & \multicolumn{2}{c}{0.01} \\
+Number of epochs & 50 & 20 \\
+Batch size & 16 & 8 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \end{document}
